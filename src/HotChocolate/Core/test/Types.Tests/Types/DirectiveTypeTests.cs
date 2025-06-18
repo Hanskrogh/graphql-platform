@@ -565,7 +565,7 @@ public class DirectiveTypeTests : TypeTestBase
         var queryParameterArguments = await schema
             .MakeExecutable()
             .ExecuteAsync(
-                """query TestQuery($baz: String, $qux: Int!, $test: String){ foo @middleware(baz: $baz, qux: $qux) }""",
+                """query TestQuery($baz: String, $qux: Int!){ foo @middleware(baz: $baz, qux: $qux) }""",
                 queryVariables);
 
         queryParameterArguments.MatchSnapshot(postFix: "query-arg");

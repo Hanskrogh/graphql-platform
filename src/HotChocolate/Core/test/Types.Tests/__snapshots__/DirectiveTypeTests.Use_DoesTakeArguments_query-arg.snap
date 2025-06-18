@@ -1,14 +1,5 @@
 {
-  "errors": [
-    {
-      "message": "String cannot parse the given literal of type `VariableNode`.",
-      "path": [
-        "baz"
-      ],
-      "extensions": {
-        "field": "middleware.baz",
-        "fieldType": "String"
-      }
-    }
-  ]
+  "data": {
+    "foo": "bar"
+  }
 }
