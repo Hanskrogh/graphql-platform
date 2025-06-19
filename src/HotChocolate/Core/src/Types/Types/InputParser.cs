@@ -31,6 +31,25 @@ public sealed class InputParser
         _ignoreAdditionalInputFields = options.IgnoreAdditionalInputFields;
     }
 
+    private object? ParseLiteralWithContext(
+    IValueNode value,
+    IInputFieldInfo field,
+    Type? runtimeType,
+    InputParserContext? context)
+    {
+        if (value.Kind == SyntaxKind.Variable && context?.Variables is not null)
+        {
+            var variableName = ((VariableNode)value).Name.Value;
+            if (context.Variables.TryGetVariable<IValueNode>(variableName, out var variableValue))
+            {
+                // If we got a variable value, we need to parse it as a literal
+                return ParseLiteralWithContext(variableValue!, field, runtimeType, context);
+            }
+        }
+
+        return ParseLiteralInternal(value, field.Type, Path.Root.Append(field.Name), 0, true, field);
+    }
+
     public object? ParseLiteral(IValueNode value, IInputFieldInfo field, Type? targetType = null)
     {
         if (value is null)
@@ -43,19 +62,22 @@ public sealed class InputParser
             throw new ArgumentNullException(nameof(field));
         }
 
-        var path = Path.Root.Append(field.Name);
-        var runtimeValue = ParseLiteralInternal(value, field.Type, path, 0, true, field);
-        runtimeValue = FormatValue(field, runtimeValue);
+        return ParseLiteralWithContext(value, field, targetType, null);
+    }
 
-        // Caller doesn't care, but to ensure specificity, we set the field's runtime type
-        // to make sure it's at least converted to the right type.
-        // e.g. from a list to an array if it should be an array
-        if (targetType == null || targetType == typeof(object))
+    public object? ParseLiteral(IValueNode value, IInputFieldInfo field, InputParserContext? context)
+    {
+        if (value is null)
         {
-            targetType = field.RuntimeType;
+            throw new ArgumentNullException(nameof(value));
         }
 
-        return ConvertValue(targetType, runtimeValue);
+        if (field is null)
+        {
+            throw new ArgumentNullException(nameof(field));
+        }
+
+        return ParseLiteralWithContext(value, field, null, context);
     }
 
     public object? ParseLiteral(IValueNode value, IType type, Path? path = null)
@@ -351,12 +373,32 @@ public sealed class InputParser
             throw new ArgumentNullException(nameof(type));
         }
 
-        return ParseDirective(node, type, path ?? Path.Root, 0, true);
+        return ParseDirectiveWithContext(node, type, null, path ?? Path.Root, 0, true);
     }
 
-    private object ParseDirective(
+    public object ParseDirective(
         DirectiveNode node,
         DirectiveType type,
+        InputParserContext? context,
+        Path? path = null)
+    {
+        if (node is null)
+        {
+            throw new ArgumentNullException(nameof(node));
+        }
+
+        if (type is null)
+        {
+            throw new ArgumentNullException(nameof(type));
+        }
+
+        return ParseDirectiveWithContext(node, type, context, path ?? Path.Root, 0, true);
+    }
+
+    private object ParseDirectiveWithContext(
+        DirectiveNode node,
+        DirectiveType type,
+        InputParserContext? context,
         Path path,
         int stack,
         bool defaults)
@@ -392,6 +434,16 @@ public sealed class InputParser
                 {
                     var literal = fieldValue.Value;
                     var fieldPath = path.Append(field.Name);
+
+                    // Handle variables in directive arguments
+                    if (literal.Kind == SyntaxKind.Variable && context?.Variables is not null)
+                    {
+                        var variableName = ((VariableNode)literal).Name.Value;
+                        if (context.Variables.TryGetVariable<IValueNode>(variableName, out var variableValue))
+                        {
+                            literal = variableValue!;
+                        }
+                    }
 
                     if (literal.Kind is SyntaxKind.NullValue &&
                         field.Type.Kind is TypeKind.NonNull)
